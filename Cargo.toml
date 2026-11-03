@@ -1,6 +1,6 @@
 [package]
 name = "netsentinel"
-version = "1.0.0"
+version = "2.1.0"
 edition = "2021"
 authors = ["GlitchWorlds <bobby@bobbyray.my.id>"]
 description = "Real-time Windows network connection monitor with per-process inspection and VirusTotal integration"

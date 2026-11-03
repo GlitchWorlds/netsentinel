@@ -10,6 +10,8 @@ use windows_sys::Win32::Foundation::*;
 use windows_sys::Win32::NetworkManagement::IpHelper::*;
 use windows_sys::Win32::Networking::WinSock::*;
 
+use crate::anomaly::{analyze_anomaly, AnomalyReport};
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Protocol {
     Tcp,
@@ -26,8 +28,10 @@ pub struct ConnectionInfo {
     pub local_addr: String,
     pub remote_addr: String,
     pub remote_ip: String,
+    pub remote_port: u16,
     pub state: String,
     pub file_hash: Option<String>,
+    pub anomaly: AnomalyReport,
 }
 
 pub struct NetworkScanner {
@@ -145,6 +149,14 @@ impl NetworkScanner {
                         "-".to_string()
                     };
 
+                    let anomaly = analyze_anomaly(
+                        &name,
+                        exe.as_deref(),
+                        &remote_ip_str,
+                        remote_port,
+                        &state_str,
+                    );
+
                     let id = format!("tcp4_{}_{}_{}_{}", pid, local_port, remote_ip_str, remote_port);
 
                     list.push(ConnectionInfo {
@@ -156,8 +168,10 @@ impl NetworkScanner {
                         local_addr: format!("{}:{}", local_ip, local_port),
                         remote_addr: remote_addr_str,
                         remote_ip: remote_ip_str,
+                        remote_port,
                         state: state_str,
                         file_hash: None,
+                        anomaly,
                     });
                 }
             }
@@ -210,6 +224,14 @@ impl NetworkScanner {
                         "-".to_string()
                     };
 
+                    let anomaly = analyze_anomaly(
+                        &name,
+                        exe.as_deref(),
+                        &remote_ip_str,
+                        remote_port,
+                        &state_str,
+                    );
+
                     let id = format!("tcp6_{}_{}_{}_{}", pid, local_port, remote_ip_str, remote_port);
 
                     list.push(ConnectionInfo {
@@ -221,8 +243,10 @@ impl NetworkScanner {
                         local_addr: format!("[{}]:{}", local_ip, local_port),
                         remote_addr: remote_addr_str,
                         remote_ip: remote_ip_str,
+                        remote_port,
                         state: state_str,
                         file_hash: None,
+                        anomaly,
                     });
                 }
             }
@@ -265,6 +289,14 @@ impl NetworkScanner {
                     let pid = entry.dwOwningPid;
                     let (name, exe) = self.get_process_info(pid);
 
+                    let anomaly = analyze_anomaly(
+                        &name,
+                        exe.as_deref(),
+                        "*",
+                        0,
+                        "UDP",
+                    );
+
                     let id = format!("udp4_{}_{}", pid, local_port);
 
                     list.push(ConnectionInfo {
@@ -276,8 +308,10 @@ impl NetworkScanner {
                         local_addr: format!("{}:{}", local_ip, local_port),
                         remote_addr: "*:*".to_string(),
                         remote_ip: "*".to_string(),
+                        remote_port: 0,
                         state: "UDP".to_string(),
                         file_hash: None,
+                        anomaly,
                     });
                 }
             }
@@ -320,6 +354,14 @@ impl NetworkScanner {
                     let pid = entry.dwOwningPid;
                     let (name, exe) = self.get_process_info(pid);
 
+                    let anomaly = analyze_anomaly(
+                        &name,
+                        exe.as_deref(),
+                        "*",
+                        0,
+                        "UDP",
+                    );
+
                     let id = format!("udp6_{}_{}", pid, local_port);
 
                     list.push(ConnectionInfo {
@@ -331,8 +373,10 @@ impl NetworkScanner {
                         local_addr: format!("[{}]:{}", local_ip, local_port),
                         remote_addr: "*:*".to_string(),
                         remote_ip: "*".to_string(),
+                        remote_port: 0,
                         state: "UDP".to_string(),
                         file_hash: None,
+                        anomaly,
                     });
                 }
             }

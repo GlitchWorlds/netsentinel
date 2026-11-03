@@ -1,74 +1,68 @@
-# DNSentinel - Local DNS Proxy + Blocklist + Egress Monitor
+# NetSentinel 🛡️⚡
 
-Local UDP DNS proxy on 127.0.0.1:53 with upstream forward,
-domain blocklist, JSONL query log, and egress monitor.
+A fast, lightweight, and modern desktop application built with Rust and native GUI for real-time Windows network connection monitoring, process inspection, and automated VirusTotal intelligence scanning.
 
-Upstreams: Cloudflare 1.1.1.1 and Google 8.8.8.8 (see config.yaml).
+![Rust](https://img.shields.io/badge/Language-Rust-orange.svg)
+![Platform](https://img.shields.io/badge/Platform-Windows%20x64-blue.svg)
+![GUI](https://img.shields.io/badge/GUI-egui%20%2F%20eframe-blueviolet.svg)
+![License](https://img.shields.io/badge/License-MIT-green.svg)
 
-## Run
+---
 
-Run as ADMIN (port 53 needs privilege):
+## Features
 
-    python agent.py serve
+- **Live Network Connection Monitoring**:
+  - Monitors all active TCP and UDP sockets across IPv4 and IPv6 using native Windows IP Helper APIs (`GetExtendedTcpTable`, `GetExtendedUdpTable`).
+  - Identifies which application / process name and PID opened each connection.
+  - Resolves local address, remote destination IP, port numbers, and socket states (`ESTABLISHED`, `LISTEN`, `TIME_WAIT`, `CLOSE_WAIT`, etc.).
 
-Default config.yaml: listen 127.0.0.1, port 53, timeout 3.0,
-blocklist blocklist.txt, log logs/dns.log,
-egress_log logs/egress.log, egress_interval 10.
-## Set DNS Windows to 127.0.0.1
+- **Application & Process Inspection**:
+  - Automatically maps active network sockets to the exact executable path on disk.
+  - Direct button to open the application's file location in Windows Explorer.
+  - Instant SHA-256 cryptographic hash computation for suspicious binaries.
 
-1. Settings, Network, active adapter, Properties, IPv4.
-2. Preferred DNS 127.0.0.1, Alternate 1.1.1.1.
-3. Run ipconfig flushdns, then nslookup example.com.
+- **VirusTotal Integration**:
+  - **File Hash Reputation**: Check any active process binary against 70+ antivirus engines on VirusTotal with a single click.
+  - **Remote IP Reputation**: Check destination server/IP addresses against VirusTotal threat intelligence databases.
+  - Live analysis scorecard (Malicious, Suspicious, Harmless, Undetected) with direct permalinks to full web reports.
+  - Secure local configuration for storing your free VirusTotal API key.
 
-## CLI blocklist
+- **Filtering & Ergonomics**:
+  - Real-time search filter by process name, PID, local IP, remote IP, or port.
+  - Protocol filters (All, TCP, UDP) and connection state filters (e.g. Established only).
+  - Configurable auto-refresh interval with background non-blocking worker threads.
 
-    python agent.py block add DOMAIN
-    python agent.py block remove DOMAIN
-    python agent.py block list
+---
 
-Blocked domains resolve to 0.0.0.0 and log blocked true.
-## Monitoring
+## Quick Start (Pre-built Binary)
 
-- logs/dns.log: one JSON line per query (ts, client, qname, qtype, action).
-- logs/egress.log: outbound snapshot every egress_interval seconds.
-- Watch live: Get-Content logs/dns.log -Tail 20 -Wait.
+1. Download `netsentinel-windows-x64.zip` from the latest **[Releases](https://github.com/GlitchWorlds/netsentinel/releases)**.
+2. Extract the archive.
+3. Run `netsentinel.exe`. (No runtime installation required).
+4. *(Optional)* Click **⚙️ Pengaturan** in the top-right corner to input your free VirusTotal API key to enable instant malware reputation checks.
 
-## Rollback
+---
 
-1. Stop the proxy with Ctrl+C.
-2. Restore DNS to Automatic or 1.1.1.1.
-3. Run ipconfig flushdns. No permanent system change.
+## Building from Source
 
-## Limitations
+### Prerequisites
+- Rust 1.80+ (`cargo`, `rustc`)
+- A C compiler / linker (GCC MinGW-w64 or MSVC build tools)
 
-- Exact-domain blocking: ads.com does not block sub.ads.com.
-- DoH/DoT bypass: browsers with DNS-over-HTTPS or TLS skip this proxy.
-- UDP only; needs admin for port 53; stdlib only (psutil optional).
+### Build
+```bash
+# Clone the repository
+git clone https://github.com/GlitchWorlds/netsentinel.git
+cd netsentinel
 
+# Build optimized release binary
+cargo build --release
+```
 
-## GUI
+The compiled standalone executable will be located at `target/release/netsentinel.exe`.
 
-Run as ADMIN (port 53 needs privilege):
+---
 
-    python gui.py
+## License
 
-Features: Start/Stop server, blocklist search, monitoring tail 200 auto 2s.
-
-## Installer Windows
-
-Cara build: jalankan build-exe.bat, hasil dist/DNSentinel.exe. Installer: compile installer/DNSentinel.iss via Inno Setup.
-
-
-## Tracking + Autostart
-
-Network tracking:
-
-    python nettrack.py
-
-Autostart (Windows Task Scheduler):
-
-    python autostart.py status
-    python autostart.py enable
-    python autostart.py disable
-
-GUI: Settings checkbox Autostart + Apply button, NetTrack tail 20.
+This project is licensed under the MIT License.

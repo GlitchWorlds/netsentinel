@@ -1,9 +1,5 @@
-__pycache__/
-*.pyc
-*.pyo
-logs/
+/target
+Cargo.lock
+*.zip
 dist/
-build/
-node_modules/
-electron/node_modules/
-*.log
+.DS_Store

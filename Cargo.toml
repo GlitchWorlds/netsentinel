@@ -1,0 +1,24 @@
+[package]
+name = "netsentinel"
+version = "1.0.0"
+edition = "2021"
+authors = ["GlitchWorlds <bobby@bobbyray.my.id>"]
+description = "Real-time Windows network connection monitor with per-process inspection and VirusTotal integration"
+
+[dependencies]
+eframe = { version = "0.30.0", default-features = false, features = ["default_fonts", "glow"] }
+windows-sys = { version = "0.52", features = [
+    "Win32_Foundation",
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_Networking_WinSock",
+    "Win32_System_Threading",
+    "Win32_System_ProcessStatus",
+] }
+sysinfo = "0.33"
+reqwest = { version = "0.12", default-features = false, features = ["json", "blocking", "rustls-tls", "multipart"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+hex = "0.4"
+webbrowser = "1.0"
+chrono = "0.4"

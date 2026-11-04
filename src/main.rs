@@ -24,10 +24,6 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "NetSentinel",
         options,
-        Box::new(|cc| {
-            // Force dark theme so contrast and colors remain consistent regardless of Windows OS light/dark mode
-            cc.egui_ctx.set_visuals(egui::Visuals::dark());
-            Ok(Box::new(NetSentinelApp::new(cc)))
-        }),
+        Box::new(|cc| Ok(Box::new(NetSentinelApp::new(cc)))),
     )
 }

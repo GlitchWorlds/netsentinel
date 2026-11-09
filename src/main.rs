@@ -2,8 +2,10 @@
 
 mod anomaly;
 mod app;
+mod autostart;
 mod defender;
 mod net;
+mod traffic;
 mod virustotal;
 
 #[cfg(test)]

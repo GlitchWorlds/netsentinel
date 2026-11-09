@@ -28,8 +28,10 @@ pub struct ConnectionInfo {
     pub local_addr: String,
     pub remote_addr: String,
     pub remote_ip: String,
+    #[allow(dead_code)]
     pub remote_port: u16,
     pub state: String,
+    #[allow(dead_code)]
     pub file_hash: Option<String>,
     pub anomaly: AnomalyReport,
 }

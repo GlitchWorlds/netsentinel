@@ -15,6 +15,7 @@ pub enum DefenderStatus {
 pub struct DefenderResult {
     pub path: String,
     pub status: DefenderStatus,
+    #[allow(dead_code)]
     pub raw_output: String,
 }
 

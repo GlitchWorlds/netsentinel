@@ -8,8 +8,10 @@ use std::time::{Duration, Instant};
 use eframe::egui::{self, Color32, RichText, ScrollArea, Vec2};
 
 use crate::anomaly::RiskLevel;
+use crate::autostart;
 use crate::defender::{DefenderResult, DefenderScanner, DefenderStatus};
 use crate::net::{ConnectionInfo, NetworkScanner, Protocol};
+use crate::traffic::{format_duration, format_session_mb, format_speed, TrafficTracker};
 use crate::virustotal::{VirusTotalClient, VtScanReport};
 
 #[derive(serde::Serialize, serde::Deserialize, Default, Clone)]
@@ -19,6 +21,8 @@ pub struct AppConfig {
     pub refresh_interval_secs: u64,
     #[serde(default)]
     pub theme: String, // "system", "dark", "light"
+    #[serde(default)]
+    pub auto_start: bool,
 }
 
 impl AppConfig {
@@ -50,6 +54,7 @@ impl AppConfig {
                 auto_refresh: true,
                 refresh_interval_secs: 3,
                 theme: "system".to_string(),
+                auto_start: false,
             }
         }
     }
@@ -82,6 +87,7 @@ enum AppAction {
 pub struct NetSentinelApp {
     scanner: NetworkScanner,
     defender: DefenderScanner,
+    traffic: TrafficTracker,
     connections: Vec<ConnectionInfo>,
     search_query: String,
     filter_protocol: Option<Protocol>,
@@ -91,6 +97,7 @@ pub struct NetSentinelApp {
     config: AppConfig,
     show_settings: bool,
     api_key_input: String,
+    auto_start_input: bool,
 
     last_refresh: Instant,
     status_text: String,
@@ -124,7 +131,14 @@ impl NetSentinelApp {
         let mut scanner = NetworkScanner::new();
         let connections = scanner.scan_connections();
         let defender = DefenderScanner::new();
-        let config = AppConfig::load();
+        let mut traffic = TrafficTracker::new();
+        traffic.refresh();
+
+        let live_auto_start = autostart::is_auto_start_enabled();
+        let mut config = AppConfig::load();
+        config.auto_start = live_auto_start;
+        let auto_start_input = live_auto_start;
+
         let vt_client = VirusTotalClient::new(config.vt_api_key.clone());
         let api_key_input = config.vt_api_key.clone();
 
@@ -139,6 +153,7 @@ impl NetSentinelApp {
         Self {
             scanner,
             defender,
+            traffic,
             connections,
             search_query: String::new(),
             filter_protocol: None,
@@ -147,8 +162,9 @@ impl NetSentinelApp {
             config,
             show_settings: false,
             api_key_input,
+            auto_start_input,
             last_refresh: Instant::now(),
-            status_text: "NetSentinel siap. Memindai koneksi jaringan & analisis anomali.".to_string(),
+            status_text: "NetSentinel siap. Memindai koneksi jaringan, traffic, & analisis anomali.".to_string(),
             selected_conn: None,
             vt_client,
             is_scanning_vt: false,
@@ -370,7 +386,12 @@ impl eframe::App for NetSentinelApp {
 
         self.check_background_tasks();
 
-        // Auto refresh tick
+        // Traffic statistics sample tick (refreshes roughly every 1 second)
+        if self.traffic.last_sample_elapsed() >= Duration::from_millis(950) {
+            self.traffic.refresh();
+        }
+
+        // Auto refresh connection list tick
         if self.config.auto_refresh
             && self.last_refresh.elapsed() >= Duration::from_secs(self.config.refresh_interval_secs)
             && !self.is_scanning_vt
@@ -379,10 +400,8 @@ impl eframe::App for NetSentinelApp {
             self.refresh_network();
         }
 
-        // Request repaint if scanning
-        if self.is_scanning_vt || self.is_scanning_all_defender || self.is_scanning_defender_single {
-            ctx.request_repaint_after(Duration::from_millis(250));
-        }
+        // Request repaint for smooth traffic speed meter and background scanning
+        ctx.request_repaint_after(Duration::from_millis(500));
 
         let mut app_action: Option<AppAction> = None;
 
@@ -396,11 +415,15 @@ impl eframe::App for NetSentinelApp {
                     Color32::from_rgb(0, 120, 200)
                 };
                 ui.heading(RichText::new("🛡️ NetSentinel").size(20.0).strong().color(brand_color));
-                ui.label(RichText::new("v2.1.0 | Real-time Network Anomaly Monitor, Defender Engine & VirusTotal").color(ui.visuals().weak_text_color()));
+                ui.label(RichText::new("v2.2.0 | Real-time Network Anomaly Monitor, Defender Engine & VirusTotal").color(ui.visuals().weak_text_color()));
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("⚙️ Pengaturan").clicked() {
                         self.show_settings = !self.show_settings;
+                        if self.show_settings {
+                            self.auto_start_input = autostart::is_auto_start_enabled();
+                            self.api_key_input = self.config.vt_api_key.clone();
+                        }
                     }
 
                     // Theme quick-toggle button
@@ -438,6 +461,84 @@ impl eframe::App for NetSentinelApp {
                     if ui.selectable_label(self.config.auto_refresh, auto_label).clicked() {
                         self.config.auto_refresh = !self.config.auto_refresh;
                         self.config.save();
+                    }
+                });
+            });
+
+            ui.add_space(4.0);
+            ui.separator();
+            ui.add_space(4.0);
+
+            // Traffic & Session MB Usage Bar
+            ui.horizontal(|ui| {
+                let rx_rate = self.traffic.rx_rate_bps();
+                let tx_rate = self.traffic.tx_rate_bps();
+                let sess_rx = self.traffic.session_rx_bytes();
+                let sess_tx = self.traffic.session_tx_bytes();
+                let sess_total = self.traffic.total_session_bytes();
+                let dur_str = format_duration(self.traffic.session_duration());
+
+                let in_color = if is_dark {
+                    Color32::from_rgb(80, 200, 255)
+                } else {
+                    Color32::from_rgb(0, 120, 220)
+                };
+                let out_color = if is_dark {
+                    Color32::from_rgb(255, 170, 60)
+                } else {
+                    Color32::from_rgb(200, 100, 0)
+                };
+                let total_color = if is_dark {
+                    Color32::from_rgb(100, 240, 140)
+                } else {
+                    Color32::from_rgb(0, 150, 50)
+                };
+
+                let traffic_bar = ui.horizontal(|ui| {
+                    ui.label(RichText::new("🌐 Traffic:").strong().color(ui.visuals().text_color()));
+
+                    // In / Download Speed & Session MB
+                    ui.label(RichText::new(format!("⬇ Masuk (In): {}", format_speed(rx_rate))).strong().color(in_color));
+                    ui.label(RichText::new(format!("(Sesi: {})", format_session_mb(sess_rx))).color(ui.visuals().weak_text_color()));
+
+                    ui.separator();
+
+                    // Out / Upload Speed & Session MB
+                    ui.label(RichText::new(format!("⬆ Keluar (Out): {}", format_speed(tx_rate))).strong().color(out_color));
+                    ui.label(RichText::new(format!("(Sesi: {})", format_session_mb(sess_tx))).color(ui.visuals().weak_text_color()));
+
+                    ui.separator();
+
+                    // Total Session Usage in MB
+                    ui.label(RichText::new(format!("📊 Total Selama Terbuka: {}", format_session_mb(sess_total))).strong().color(total_color));
+
+                    // Session duration timer
+                    ui.label(RichText::new(format!("⏱ {}", dur_str)).color(ui.visuals().weak_text_color()));
+                });
+
+                // Tooltip showing detailed per-interface breakdown on hover
+                let mut tooltip_text = String::from("Statistik Pemakaian Data Jaringan (Real-Time)\n\nAntarmuka Terdeteksi:");
+                if self.traffic.interfaces().is_empty() {
+                    tooltip_text.push_str("\n(Menunggu sampel jaringan berikutnya...)");
+                } else {
+                    for iface in self.traffic.interfaces() {
+                        tooltip_text.push_str(&format!(
+                            "\n• {}: ⬇ {} | ⬆ {} (Sesi: ⬇ {} / ⬆ {})",
+                            iface.name,
+                            format_speed(iface.rx_rate_bps),
+                            format_speed(iface.tx_rate_bps),
+                            format_session_mb(iface.session_rx_bytes),
+                            format_session_mb(iface.session_tx_bytes),
+                        ));
+                    }
+                }
+                tooltip_text.push_str("\n\n* Loopback diabaikan agar traffic internal tidak menggandakan pemakaian internet/LAN.");
+                traffic_bar.response.on_hover_text(tooltip_text);
+
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("🔄 Reset Sesi").on_hover_text("Reset hitungan MB pemakaian sesi kembali ke 0 MB").clicked() {
+                        self.traffic.reset_session();
+                        self.status_text = "Hitungan pemakaian data sesi telah di-reset ke 0 MB.".to_string();
                     }
                 });
             });
@@ -500,6 +601,16 @@ impl eframe::App for NetSentinelApp {
             ui.horizontal(|ui| {
                 ui.label(RichText::new(&self.status_text).size(12.0).color(ui.visuals().weak_text_color()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let auto_status = if autostart::is_auto_start_enabled() {
+                        let col = if is_dark { Color32::GREEN } else { Color32::from_rgb(0, 140, 30) };
+                        RichText::new("Auto-Start: Aktif").color(col)
+                    } else {
+                        RichText::new("Auto-Start: Nonaktif").color(ui.visuals().weak_text_color())
+                    };
+                    ui.label(auto_status);
+
+                    ui.separator();
+
                     let def_status = if self.defender.is_available() {
                         let col = if is_dark { Color32::GREEN } else { Color32::from_rgb(0, 140, 30) };
                         RichText::new("Defender: Tersedia (Lokal)").color(col)
@@ -527,19 +638,19 @@ impl eframe::App for NetSentinelApp {
             egui::Window::new("⚙️ Pengaturan NetSentinel")
                 .collapsible(false)
                 .resizable(false)
-                .default_size(Vec2::new(460.0, 270.0))
+                .default_size(Vec2::new(480.0, 380.0))
                 .anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO)
                 .show(ctx, |ui| {
-                    ui.heading("Konfigurasi Mesin Pemindai");
-                    ui.label("NetSentinel menggabungkan mesin Windows Defender (100% lokal & gratis) dan VirusTotal API (intelijen cloud).");
+                    ui.heading("Konfigurasi Mesin Pemindai & Sistem");
+                    ui.label("NetSentinel menggabungkan pemantauan lalu lintas real-time, Windows Defender (lokal & gratis), dan VirusTotal.");
 
                     ui.add_space(8.0);
                     ui.label("VirusTotal API Key:");
-                    ui.add(egui::TextEdit::singleline(&mut self.api_key_input).password(true).desired_width(400.0));
+                    ui.add(egui::TextEdit::singleline(&mut self.api_key_input).password(true).desired_width(420.0));
 
                     ui.add_space(8.0);
                     ui.horizontal(|ui| {
-                        ui.label("Interval Auto Refresh (detik):");
+                        ui.label("Interval Auto Refresh Jaringan (detik):");
                         let mut interval = self.config.refresh_interval_secs;
                         if ui.add(egui::Slider::new(&mut interval, 1..=30).suffix(" s")).changed() {
                             self.config.refresh_interval_secs = interval;
@@ -566,6 +677,35 @@ impl eframe::App for NetSentinelApp {
                         }
                     });
 
+                    ui.add_space(8.0);
+                    ui.separator();
+                    ui.add_space(6.0);
+
+                    // Auto-start section
+                    ui.heading(RichText::new("🚀 System Auto Start").size(14.0));
+                    ui.checkbox(
+                        &mut self.auto_start_input,
+                        "🚀 Jalankan otomatis saat Windows menyala (System Auto Start)",
+                    );
+
+                    let is_live_active = autostart::is_auto_start_enabled();
+                    let status_col = if is_live_active {
+                        if is_dark { Color32::GREEN } else { Color32::from_rgb(0, 140, 30) }
+                    } else {
+                        ui.visuals().weak_text_color()
+                    };
+                    let status_msg = if is_live_active {
+                        "Status: Aktif di Registry (HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run)"
+                    } else {
+                        "Status: Nonaktif (Aplikasi tidak berjalan otomatis saat boot)"
+                    };
+                    ui.label(RichText::new(status_msg).size(11.5).color(status_col));
+                    ui.label(
+                        RichText::new("NetSentinel akan otomatis berjalan di latar belakang saat Anda masuk ke Windows.")
+                            .size(11.0)
+                            .color(ui.visuals().weak_text_color()),
+                    );
+
                     ui.add_space(6.0);
                     ui.label(format!("Path Defender CLI: {}", self.defender.get_cli_path().unwrap_or_else(|| "Tidak ditemukan".to_string())));
 
@@ -577,13 +717,34 @@ impl eframe::App for NetSentinelApp {
                         if ui.button("💾 Simpan").clicked() {
                             self.config.vt_api_key = self.api_key_input.trim().to_string();
                             self.vt_client.set_api_key(self.config.vt_api_key.clone());
+
+                            // Apply auto start change
+                            if self.auto_start_input != autostart::is_auto_start_enabled() {
+                                match autostart::set_auto_start(self.auto_start_input) {
+                                    Ok(()) => {
+                                        self.config.auto_start = self.auto_start_input;
+                                        self.status_text = if self.auto_start_input {
+                                            "Pengaturan disimpan: Auto-Start AKTIF di registry Windows.".to_string()
+                                        } else {
+                                            "Pengaturan disimpan: Auto-Start DINONAKTIFKAN dari registry Windows.".to_string()
+                                        };
+                                    }
+                                    Err(e) => {
+                                        self.status_text = format!("Gagal mengubah auto-start: {e}");
+                                    }
+                                }
+                            } else {
+                                self.config.auto_start = self.auto_start_input;
+                                self.status_text = "Pengaturan berhasil disimpan.".to_string();
+                            }
+
                             self.config.save();
                             self.apply_theme(ctx);
                             self.show_settings = false;
-                            self.status_text = "Pengaturan berhasil disimpan.".to_string();
                         }
                         if ui.button("Batal").clicked() {
                             self.api_key_input = self.config.vt_api_key.clone();
+                            self.auto_start_input = autostart::is_auto_start_enabled();
                             self.show_settings = false;
                         }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

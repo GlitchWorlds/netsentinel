@@ -23,6 +23,7 @@ pub struct EngineResult {
 #[derive(Debug, Clone)]
 pub struct VtScanReport {
     pub target: String,
+    #[allow(dead_code)]
     pub target_type: String, // "file" or "ip"
     pub stats: AnalysisStats,
     pub top_detections: Vec<String>,
@@ -38,12 +39,14 @@ struct VtResponse {
 #[derive(Debug, Deserialize)]
 struct VtData {
     attributes: Option<VtAttributes>,
+    #[allow(dead_code)]
     links: Option<VtLinks>,
 }
 
 #[derive(Debug, Deserialize)]
 struct VtLinks {
     #[serde(rename = "self")]
+    #[allow(dead_code)]
     _self_url: Option<String>,
 }
 
@@ -51,6 +54,7 @@ struct VtLinks {
 struct VtAttributes {
     last_analysis_stats: Option<AnalysisStats>,
     last_analysis_results: Option<HashMap<String, EngineResult>>,
+    #[allow(dead_code)]
     meaningful_name: Option<String>,
 }
 

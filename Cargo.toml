@@ -1,6 +1,6 @@
 [package]
 name = "netsentinel"
-version = "2.1.0"
+version = "2.2.0"
 edition = "2021"
 authors = ["GlitchWorlds <bobby@bobbyray.my.id>"]
 description = "Real-time Windows network connection monitor with per-process inspection and VirusTotal integration"
@@ -13,6 +13,7 @@ windows-sys = { version = "0.52", features = [
     "Win32_Networking_WinSock",
     "Win32_System_Threading",
     "Win32_System_ProcessStatus",
+    "Win32_System_Registry",
 ] }
 sysinfo = "0.33"
 reqwest = { version = "0.12", default-features = false, features = ["json", "blocking", "rustls-tls", "multipart"] }

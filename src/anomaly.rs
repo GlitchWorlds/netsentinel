@@ -1,5 +1,3 @@
-use std::path::Path;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RiskLevel {
     Safe,
@@ -14,6 +12,7 @@ pub struct AnomalyReport {
 }
 
 impl AnomalyReport {
+    #[allow(dead_code)]
     pub fn safe() -> Self {
         Self {
             risk: RiskLevel::Safe,
